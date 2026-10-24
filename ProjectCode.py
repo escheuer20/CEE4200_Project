@@ -76,9 +76,11 @@ seconds_in_hour = 60*60
 max_power = 1289 #MW
 design_head = 18.9 #m
 tailwater_level = min_level - design_head
+live_fraction = .2 #fraction of resevoir where build up will effect head (i.e. not at the very base of the dam)
+
 
 #sediment parameters, mostly placeholders until we can properly parameterize
-sed_load = 70*10**6 # T/year
+sed_load = 90*10**6 # T/year
 bulk_density = 1.3 #t/m^3
 sluice_reduction = 0.3 #30% reduction
 flush_fraction = .3 
@@ -102,13 +104,6 @@ def bau(TE, sed_vol):
     dv = TE*sed_load/bulk_density #accumulated sediment
     cost = 0
     return sed_vol + dv, cost 
-
-def sluicing(TE, sediment_vol):
-    # let sediment flow through during high flows
-    TE = TE*(1 - sluice_reduction)
-    dv = TE*sed_load/bulk_density
-    cost = sluice_cost
-    return sediment_vol + dv, cost
 
 def flushing(TE, sediment_vol):
     # reduce deposited amount by a set fraction
@@ -157,15 +152,16 @@ def run_dam(ts, flow_data, sed_strat):
         day = (j+1)//steps_day
         #tackle sediment once per year
         if j % steps_year ==0:
-            annual_inflow = sum(flow_data[day:day+365])*24*seconds_in_hour
-            te = TE(max_storage, annual_inflow)
+            annual_inflow = sum(flow_data[day:day+365])*seconds_in_day
+            te = TE(storage - sediment_vol, annual_inflow)      
             sediment_vol, cost = sed_strat(te, sediment_vol)
-            #decreasing space based on amount of sediment
-            max_storage = storage - sediment_vol
-            min_storage = max_storage*min_level/max_level
-            capacity_lis.append(max_storage/(10**6))
+            # only part of the sediment fills up in the "live" area
+            max_storage = storage - sediment_vol*live_fraction
+            if max_storage < min_storage:     # live storage completely full of sediment
+                max_storage = min_storage
+            capacity_lis.append((storage - sediment_vol)/(10**6))
             cost_lis.append(cost)
-        level = s_lis[j]*max_level/max_storage
+        level = s_lis[j]/area_reservoir
         head = level - tailwater_level
         
         # add inflow to storage from previous day
@@ -241,13 +237,26 @@ def run_dam(ts, flow_data, sed_strat):
                'profit': profit_lis}
     return results
 
-time_step = 8
-results = run_dam(time_step, inflow_data, dredging)
-years = np.arange(len(results['capacity'])) + year_start
+time_step = 1
+strategies = [bau, flushing, dredging]
+names = ['BAU', 'Flushing', 'Dredging']
+ 
 fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
-ax1.plot(years, results['capacity'])
-ax2.plot(years, np.array(results['annual_energy'])/1000)  # GWh
-ax3.plot(years, np.array(results['profit'])/1e6)          # million $
+ 
+for i in range(len(strategies)):
+    results = run_dam(time_step, inflow_data, strategies[i])
+    years = np.arange(len(results['capacity'])) + year_start
+ 
+    ax1.plot(years, results['capacity'], label=names[i])
+    ax2.plot(years, np.array(results['annual_energy'])/1000, label=names[i])  # GWh
+    ax3.plot(years, np.array(results['profit'])/1e6, label=names[i])          # million $
+ 
+    print(names[i])
+    print('  final capacity:', round(results['capacity'][-1]), 'Mm^3')
+    print('  total energy:  ', round(sum(results['annual_energy'])/1000), 'GWh')
+    print('  total cost:    ', round(sum(results['cost'])/1e6, 1), 'million $')
+    print('  total profit:  ', round(sum(results['profit'])/1e6, 1), 'million $')
+ 
 ax1.set_ylabel('Capacity (Mm$^3$)')
 ax1.set_title('Reservoir Capacity')
 ax1.legend()
@@ -256,7 +265,6 @@ ax2.set_title('Annual Energy Production')
 ax3.set_ylabel('Profit (million $/yr)')
 ax3.set_title('Annual Profit (energy revenue - sediment cost)')
 ax3.set_xlabel('Year')
-plt.tight_layout()
 
 
 ##From older version of the model without sediment
