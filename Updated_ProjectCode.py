@@ -61,7 +61,7 @@ plt.ylabel('Inflow (m^3/day)')
 # model dam
 min_level=278 # meters
 max_level=298 # meters
-storage= 1618681000 # m^3
+storage= 1300000000 # m^3 (changed based on online resources)
 turb_capacity = 5000 # m^3/s
 area_reservoir = storage/max_level
 max_storage = storage
@@ -166,8 +166,8 @@ def run_dam(ts, flow_data, sed_strat):
         if imagined_storage>min_storage:
             #can release water through turbines to get power
             poss_turb_vol = imagined_storage-min_storage #possible volume through turbines
-            turb_sec = poss_turb_vol/turb_capacity #possible run time of turbines
-            if turb_sec>=ts_sec:
+            poss_turb_sec = poss_turb_vol/turb_capacity #possible run time of turbines
+            if poss_turb_sec>=ts_sec:
                 #turbine runs the whole day, any remaining water must be lost through spillways
                 turb_time = ts_sec
                 turbine_time_lis.append(ts_sec/seconds_in_hour)
@@ -184,12 +184,12 @@ def run_dam(ts, flow_data, sed_strat):
             else: # turbine runs less than full day and no need to lose water through spillways
                 spill=0
                 spillway_lis.append(spill)
-                turb_time=turb_sec # as calculated above
+                turb_time=poss_turb_sec # as calculated above
                 turbine_time_lis.append(turb_time/seconds_in_hour)
                 turb_water=poss_turb_vol
                 turbine_water_lis.append(turb_water)
                 # calculate energy
-                energy=max_power*turb_sec/seconds_in_hour*head/design_head
+                energy=max_power*turb_time/seconds_in_hour*head/design_head
             energy_lis.append(energy)
             tot_discharge=spill+turb_water
             tot_discharge_lis.append(tot_discharge)
@@ -252,7 +252,7 @@ for i in range(len(strategies)):
     print('  total energy:  ', round(sum(results['annual_energy'])/1000), 'GWh')
     print('  total cost:    ', round(sum(results['cost'])/1e6, 1), 'million $')
     print('  total profit:  ', round(sum(results['profit'])/1e6, 1), 'million $')
-    print(np.mean(results['annual_energy'])/1000)
+    print('  avg ann energy ', round(np.mean(results['annual_energy'])/1000,1), 'GWh')
  
 ax1.set_ylabel('Capacity (Mm$^3$)')
 ax1.set_title('Reservoir Capacity')
