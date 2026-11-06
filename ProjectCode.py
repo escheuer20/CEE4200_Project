@@ -317,8 +317,4 @@ plt.tight_layout()
 '''
 
 
-# model each sediment strategy
-# Thoughts on sediment modelling
-# need to model the sediment input based on constant value
-# need to model the sediment output based on what sediment strategy we use
 
