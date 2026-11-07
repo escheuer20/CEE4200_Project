@@ -292,8 +292,8 @@ strategies = [bau, flushing, flushing]
 names = ['BAU', 'Flushing (wet season)', 'Flushing (dry season)']
 flush_seasons = ['wet', 'wet', 'dry'] # only matters for the flushing runs
 
-fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
-
+fig, (ax1) = plt.subplots(1, 1, figsize=(10, 10), sharex=True)
+'''
 for i in range(len(strategies)):
     results = run_dam(time_step, inflow_data, season_data, strategies[i], flush_seasons[i])
     years = np.arange(len(results['capacity'])) + year_start
@@ -320,3 +320,27 @@ ax3.set_title('Annual Profit (energy revenue - sediment cost)')
 ax3.set_xlabel('Year')
 plt.tight_layout()
 plt.show()
+'''
+
+for i in range(1, len(strategies)):
+    results = run_dam(time_step, inflow_data, season_data, strategies[i], flush_seasons[i])
+    years = np.arange(len(results['capacity'])) + year_start
+    final_energy = results['energy']
+    days = np.linspace(1939, 2026.85, len(final_energy))
+    ax1.plot(days[12000:22000], final_energy[12000:22000], label=names[i])
+    
+    
+ax1.set_ylabel('Energy (GWh/yr)')
+ax1.set_title('Energy Produced')
+ax1.legend()
+#ax2.set_ylabel('Cost $')
+#ax2.set_title('Cost')
+'''
+ax3.set_ylabel('Profit (million $/yr)')
+ax3.set_title('Annual Profit (energy revenue - sediment cost)')
+'''
+#ax2.set_xlabel('Year')
+plt.savefig('Energy Production')
+plt.show()
+    
+    
