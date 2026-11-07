@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import xarray as xr
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -75,10 +75,10 @@ live_fraction = .2 #fraction of resevoir where build up will effect head (i.e. n
 
 
 #sediment parameters, mostly placeholders until we can properly parameterize
-sed_load = 90*10**6 # T/year
+sed_load = 100*10**6 # T/year
 bulk_density = 1.3 #t/m^3
 sluice_reduction = 0.3 #30% reduction
-flush_fraction = .7 
+flush_fraction = .1 
 dredge_fraction = 0.8
 
 # monetary parameters
@@ -86,6 +86,7 @@ electricty_price = 64 #$/MW
 sluice_cost = 2*10**6 #$/Year
 flush_cost = 3 #$/m^3
 dredge_cost = 5 #$/m^3
+
 
 #create functions for the various sediment stratagies
 
