@@ -596,7 +596,96 @@ plt.ylabel('Normalized Value (0=Min, 1=Max')
 plt.grid(True, alpha=0.3)
 plt.show()
 
+#"tornado" plot for sensetivity analysis
+tornado_strategy = flushing # strategy to test
+tornado_season = 'wet'      # flush season to test
 
+
+param_names = ['Flush cost\n(0.15 - 0.6 $/m³)',
+               'Sediment load\n(50 - 150 Mt/yr)',
+               'River flow\n(80% - 120%)',
+               'Sediment removed per flush\n(25% - 75%)']
+base_values = [0.3,  100*10**6, 1.0, 0.5]
+low_values  = [0.15,  50*10**6, 0.8, 0.25]
+high_values = [0.6,  150*10**6, 1.2, 0.75]
+
+indicator_names = ['Average Annual Profit (million $/yr)',
+                   'Average Annual Energy (GWh/yr)',
+                   'Days Without Generation (days/yr)',
+                   'Final Capacity (Mm³)']
+
+def days_no_energy(energy_lis, ts):
+    # counts days where the turbines made no energy at all
+    steps_day = int(24/ts)
+    count = 0
+    for d in range(len(energy_lis)//steps_day):
+        if sum(energy_lis[d*steps_day:(d+1)*steps_day]) == 0:
+            count = count + 1
+    return count
+
+def get_indicators(results):
+    profit = np.mean(results['profit'])/1e6                # million $/yr
+    energy = np.mean(results['annual_energy'])/1000        # GWh/yr
+    no_energy_days = days_no_energy(results['energy'], time_step)/len(results['capacity'])  # days/yr
+    capacity = results['capacity'][-1]                     # Mm^3
+    return [profit, energy, no_energy_days, capacity]
+
+def run_case(values):
+    # values = [flush cost, sediment load, flow multiplier, fraction removed]
+    global flush_cost, sed_load, flushed_goal # lets this function change the parameters run_dam uses
+    flush_cost = values[0]
+    sed_load = values[1]
+    flushed_goal = values[3]
+    flows = inflow_data*values[2] # scale the whole flow record up or down
+    results = run_dam(time_step, flows, season_data, tornado_strategy, tornado_season)
+    return get_indicators(results)
+
+# first run baseline, then each parameter at low and high value
+base_ind = run_case(base_values)
+low_ind = []
+high_ind = []
+for k in range(len(param_names)):
+    case = base_values.copy()
+    case[k] = low_values[k]
+    low_ind.append(run_case(case))
+    case = base_values.copy()
+    case[k] = high_values[k]
+    high_ind.append(run_case(case))
+
+# reset parameters so the next chunk of code isn't effected
+flush_cost = base_values[0]
+sed_load = base_values[1]
+flushed_goal = base_values[3]
+
+# plot one tornado chart per indicator
+fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+axes = axes.flatten() 
+for m in range(len(indicator_names)):
+    ax = axes[m]
+    base = base_ind[m]
+    low_change = []
+    high_change = []
+    swing = []
+    for k in range(len(param_names)):
+        low_change.append(low_ind[k][m] - base)
+        high_change.append(high_ind[k][m] - base)
+        swing.append(abs(high_ind[k][m] - low_ind[k][m]))
+    order = np.argsort(swing) # arrange by size order
+    for row in range(len(order)):
+        k = order[row]
+        # stagger low and high bars so they don't hide the other
+        ax.barh(row-0.2, low_change[k], left=base, height=0.4, color='tab:blue', label='Low value')
+        ax.barh(row+0.2, high_change[k], left=base, height=0.4, color='tab:orange', label='High value')
+    ax.set_yticks(range(len(order)))
+    ax.set_yticklabels([param_names[k] for k in order])
+    ax.axvline(base, color='black', linewidth=1)
+    ax.set_title(indicator_names[m])
+    ax.set_xlabel('baseline = ' + str(round(base, 1)))
+handles, labels = axes[0].get_legend_handles_labels()
+axes[0].legend(handles[:2], labels[:2])
+fig.suptitle(f'Sensitivity of Flushing ({tornado_season} season) to Each Parameter')
+plt.tight_layout()
+plt.show()
 
 
 
