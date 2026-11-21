@@ -76,7 +76,7 @@ live_fraction = .2 #fraction of resevoir where build up will effect head (i.e. n
 sed_load = 100*10**6 # T/year #sourced from a paper (Xun Chua et al 2024)
 bulk_density = 1.3 #t/m^3
 sluice_reduction = 0.3 #30% reduction
-flushed_goal = 0.5 # fraction of the sediment in the reservoir to flush out each flush season
+flushed_goal = 0.3 # fraction of the sediment in the reservoir to flush out each flush season
 flush_concentration = 0.02 # t/m^3, sediment carried per m^3 of flushing water (source needed)
 #dredge_fraction = 0.8 #maybe move to seperate dreging model
 
@@ -216,6 +216,8 @@ def run_dam(ts, flow_data, season_data, sed_strat, flush_season):
                 flushed = sediment_vol
             sed_vol_flushed.append(flushed)
             sediment_vol = sediment_vol - flushed
+            if sediment_vol<0:
+                sediment_vol=0
             vol_flushed = vol_flushed + flushed
             cost_lis[-1] = cost_lis[-1] + flushed*flush_cost
             flush_hours_lis[-1] = flush_hours_lis[-1] + ts
@@ -340,7 +342,7 @@ ax3.set_title('Annual Profit (energy revenue - sediment cost)')
 ax3.set_xlabel('Year')
 plt.tight_layout()
 plt.show()
-
+'''
 # now look at different percentages for dry and wet season and how it impacts the number of days
 max_dry_days = []
 max_wet_days = []
@@ -359,9 +361,14 @@ for p in percent_removed:
     flushed_goal = p
     for i in range(1, len(strategies)):
         results = run_dam(time_step, inflow_data, season_data, strategies[i], flush_seasons[i])
+        hours_flush = results['flush_hours']
+        if sum(hours_flush) != 0:
+            hours_flush = [x for x in hours_flush if x!=0]
         max_days_season[i].append(np.max(results['flush_hours'])/24)
         avg_days_season[i].append(np.mean(results['flush_hours'])/24)
-        min_days_season[i].append(np.min(results['flush_hours'])/24)
+        min_days_season[i].append(np.min(hours_flush)/24)
+print(avg_days_season[1])
+print(avg_days_season[2])
 
 for i in range(1, len(strategies)):
     axis1.scatter(percent_removed, max_days_season[i], label=names[i])
@@ -378,7 +385,8 @@ axis3.set_title('Minimum Days Spent Flushing')
 axis3.set_xlabel('Percent ot Total Sediment Removed')
 plt.tight_layout()
 plt.show()
-
+'''
+'''
 # looking at energy production for different percentages over dry and wet season
 dry_avg_energy = []
 wet_avg_energy = []
@@ -456,6 +464,144 @@ plt.ylabel('Stored Sediment (m^3)')
 plt.legend()
 plt.title('Sediment Volume over Time')
 plt.show()
+'''
+
+# create parallel coordinate plot
+import pandas as pd 
+from pandas.plotting import parallel_coordinates
+import matplotlib.cm as cm
+from matplotlib.lines import Line2D
+
+percent_removed = list(np.linspace(0.1,0.9,9))
+sed_volume = []
+avg_days_flush = []
+profit = []
+sed_flushed = []
+
+for i in range(1, len(strategies)):
+    for p in percent_removed:
+        flushed_goal=p
+        #print(flushed_goal, flush_seasons[i])
+        results = run_dam(time_step, inflow_data, season_data, strategies[i], flush_seasons[i])
+        avg_days_flush.append(np.mean(results['flush_hours'])/24)
+        sed_volume.append(np.mean(results['sed_volume']))
+        profit.append(np.mean(results['profit']))
+        sed_flushed.append(np.mean(results['sed_flushed']))
+neg_sed_volume = [-x for x in sed_volume]
+neg_avg_days_flush=[-x for x in avg_days_flush]
+seasons = []
+for i in range(len(percent_removed)):
+    seasons.append('Wet')
+for i in range(len(percent_removed)):
+    seasons.append('Dry')
+
+percents = percent_removed + percent_removed
+df = pd.DataFrame({
+    'Season' : seasons,
+    'Percent' : percents,
+    'Rev_Days' : neg_avg_days_flush,
+    'Rev_Sed_Volume' : neg_sed_volume,
+    'Sed_Flushed' : sed_flushed,
+    'Profit' : profit
+    })
+#scale
+metrics = ['Rev_Days', 'Rev_Sed_Volume', 'Profit', 'Sed_Flushed']
+df_scaled = df.copy()
+df_scaled[metrics] = (df[metrics]-df[metrics].min())/(df[metrics].max()-df[metrics].min())
+df_scaled['Label'] = (
+    df_scaled['Season'] + ' ' + df_scaled['Percent'].astype(str) + '%'
+)
+ #figure out colors
+wet_shades = cm.Blues(np.linspace(0.3,1.0, len(percent_removed)))
+dry_shades = cm.Reds(np.linspace(0.3,1.0, len(percent_removed)))
+colors = list(wet_shades) + list(dry_shades)
+# plot
+plt.figure(figsize=(8,5))
+parallel_coordinates(
+    frame=df_scaled,
+    class_column='Label',
+    cols=metrics,
+    color = colors,
+    linewidth = 2,
+    alpha = 0.8
+    )
+
+legend_handles = [
+    Line2D([0], [0], color=cm.Blues(0.75), lw=2.5, label='Wet (10% → 90%)'),
+    Line2D([0], [0], color=cm.Reds(0.75), lw=2.5, label='Dry (10% → 90%)'),
+]
+plt.legend(handles=legend_handles, title='Season', loc='best')
+
+plt.title('Wet vs. Dry Season based on Sediment Reduction')
+plt.ylabel('Normalized Value (0=Min, 1=Max')
+plt.grid(True, alpha=0.3)
+plt.show()
+
+# create parallel plot for days
+max_days_flush = []
+avg_days_flush = []
+min_days_flush = []
+
+for i in range(1, len(strategies)):
+    for p in percent_removed:
+        flushed_goal=p
+        #print(flushed_goal, flush_seasons[i])
+        results = run_dam(time_step, inflow_data, season_data, strategies[i], flush_seasons[i])
+        max_days_flush.append(np.max(results['flush_hours'])/24)
+        avg_days_flush.append(np.mean(results['flush_hours'])/24)
+        min_days_flush.append(np.min(results['flush_hours'])/24)
+
+seasons = []
+for i in range(len(percent_removed)):
+    seasons.append('Wet')
+for i in range(len(percent_removed)):
+    seasons.append('Dry')
+
+percents = percent_removed + percent_removed
+df = pd.DataFrame({
+    'Season' : seasons,
+    'Percent' : percents,
+    'Max_Days' : max_days_flush,
+    'Avg_Days' : avg_days_flush,
+    'Min_Days' : min_days_flush,
+    })
+#scale
+metrics = ['Max_Days', 'Avg_Days', 'Min_Days']
+df['Label'] = (
+    df['Season'] + ' ' + df['Percent'].astype(str) + '%'
+)
+ #figure out colors
+wet_shades = cm.Blues(np.linspace(0.3,1.0, len(percent_removed)))
+dry_shades = cm.Reds(np.linspace(0.3,1.0, len(percent_removed)))
+colors = list(wet_shades) + list(dry_shades)
+# plot
+plt.figure(figsize=(8,5))
+parallel_coordinates(
+    frame=df,
+    class_column='Label',
+    cols=metrics,
+    color = colors,
+    linewidth = 2,
+    alpha = 0.8
+    )
+
+legend_handles = [
+    Line2D([0], [0], color=cm.Blues(0.75), lw=2.5, label='Wet (10% → 90%)'),
+    Line2D([0], [0], color=cm.Reds(0.75), lw=2.5, label='Dry (10% → 90%)'),
+]
+plt.legend(handles=legend_handles, title='Season', loc='best')
+
+plt.title('Wet vs. Dry Season based on Sediment Reduction')
+plt.ylabel('Normalized Value (0=Min, 1=Max')
+plt.grid(True, alpha=0.3)
+plt.show()
+
+
+
+
+
+  
+
 
     
 
